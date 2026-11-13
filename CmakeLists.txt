@@ -1,0 +1,44 @@
+cmake_minimum_required(VERSION 3.18)
+
+project(2dRender LANGUAGES CXX CUDA)
+
+# OpenCV
+set(OpenCV_DIR "C:/opencv/build/x64/vc16/lib")
+find_package(OpenCV REQUIRED)
+find_package(OpenGL REQUIRED)
+
+#GLFW
+add_subdirectory("C:/glfw-3.5.1" glfw-build)
+
+#GLEW
+set(GLEW_INCLUDE_DIR "C:/glew-2.3.1/include")
+set(GLEW_LIBRARY "C:/glew-2.3.1/lib/Release/x64/glew32.lib")
+set(GLEW_RUNTIME_LIBRARY "C:/glew-2.3.1/bin/Release/x64/glew32.dll")
+
+find_package(CUDAToolkit REQUIRED)
+
+add_executable(2dRender ImageRender.cpp ImageGen.cu ParticleSim.cu Particle.cu)
+
+set(CMAKE_CUDA_ARCHITECTURES native)
+target_compile_features(2dRender PRIVATE cxx_std_20)
+target_compile_definitions(2dRender PRIVATE NOMINMAX)
+target_compile_options(2dRender PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>
+    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>
+)
+target_include_directories(2dRender PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
+    ${GLEW_INCLUDE_DIR}
+)
+target_link_libraries(2dRender PRIVATE
+    ${OpenCV_LIBS}
+    glfw
+    ${GLEW_LIBRARY}
+    OpenGL::GL
+    CUDA::cudart
+)
+add_custom_command(TARGET 2dRender POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${GLEW_RUNTIME_LIBRARY}"
+        "$<TARGET_FILE_DIR:2dRender>"
+)
