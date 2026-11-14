@@ -23,8 +23,8 @@ unsigned int*  hashValues = nullptr;
 unsigned int* indices = nullptr;
 Index* hashBorders = nullptr;
 
-const int particleCount = 50000;
-const int cellSize = 100;
+const int particleCount = 10000;
+const int cellSize = 25;
 int cellCount = 0;
 
 __global__
@@ -91,47 +91,49 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels, flo
         );
         CUDA_CHECK(cudaGetLastError());
     }
-    CUDA_CHECK(cudaDeviceSynchronize());
     GenerateCudaImage<<<imGrid, imBlock>>>(
         gpuImagePtr,
         width,
         height,
         channels
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
-    UpdatePosition<<<particleGrid, particleBlock>>>(
-        gpuParticles,
-        width,
-        height,
-        particleCount
-    );
-    CUDA_CHECK(cudaDeviceSynchronize());
     CalculateHash<<<particleGrid, particleBlock>>>(
         gpuParticles,
         width,
+        height,
         hashValues,
         cellSize,
         particleCount
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
+    InitIndices<<<particleGrid, particleBlock>>>(
+        indices,
+        particleCount
+    );
     SortHash(
         hashValues,
         indices,
         particleCount
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
+    cudaMemset(hashBorders, 0, sizeof(Index) * cellCount);
     GetHashBorders<<<particleGrid, particleBlock>>>(
         hashValues,
         particleCount,
         hashBorders,
         cellCount
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
+    GetDensity<<<particleGrid, particleBlock>>>(
+        gpuParticles,
+        particleCount,
+        hashBorders,
+        indices,
+        cellSize,
+        width,
+        height
+    );
     GetPressure<<<particleGrid, particleBlock>>>(
         gpuParticles,
         particleCount
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
     UpdateDirection<<<particleGrid, particleBlock>>>(
         gpuParticles,
         deltaTime,
@@ -142,14 +144,13 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels, flo
         hashBorders,
         indices
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
     UpdatePosition<<<particleGrid, particleBlock>>>(
         gpuParticles,
         width,
         height,
-        particleCount
+        particleCount,
+        deltaTime
     );
-    CUDA_CHECK(cudaDeviceSynchronize());
     placeParticles<<<particleGrid, particleBlock>>>(
         gpuImagePtr,
         gpuParticles,
@@ -158,8 +159,6 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels, flo
         channels,
         particleCount
     );
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
     return gpuImagePtr;
 }
 

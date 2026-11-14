@@ -16,8 +16,8 @@ int main() {
     if (!glfwInit())
         return -1;
    
-    int width = GetSystemMetrics(SM_CXSCREEN);
-    int height = GetSystemMetrics(SM_CYSCREEN);
+    int width = 1000;//GetSystemMetrics(SM_CXSCREEN);
+    int height = 1000;//GetSystemMetrics(SM_CYSCREEN);
     int channels = 4;
 
 

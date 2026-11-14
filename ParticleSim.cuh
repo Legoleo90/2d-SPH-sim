@@ -5,15 +5,15 @@ void InitParticles(Particle* particles, curandState *states, int width, int heig
 __global__
 void InitHashIndex(Index* indexBorders, const int particleCount);
 __global__ 
-void UpdatePosition(Particle* particles, int width, int height, const int particleCount);
+void UpdatePosition(Particle* particles, int width, int height, const int particleCount, float dTime);
 __global__
-void GetDensity(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width);
+void GetDensity(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height);
 __global__
 void GetPressure(Particle* particles, const int particleCount);
 __global__
 void UpdateDirection(Particle* particles, float dTime, const int cellSize, const int width, const int height, const int particleCount, Index* hashBorders, unsigned int* indices);
 __global__
-void CalculateHash(Particle* particles, int width, unsigned int* hash, const int cellSize, int particleCount);
+void CalculateHash(Particle* particles, const int width, const int height, unsigned int* hash, const int cellSize, const int particleCount);
 __global__
 void InitIndices(unsigned int* indices, int particleCount);
 __host__

@@ -44,9 +44,9 @@ public:
 struct Particle{
 public: 
     Vector2 position, direction;
-    float volume, pressure, density;
+    float volume, pressure, density, mass;
     __device__
-    Particle(float x, float y, float vol) : position(Vector2(x, y)), direction(Vector2()), volume(vol), pressure(0), density(1010){};
+    Particle(float x, float y, float vol) : position(Vector2(x, y)), direction(Vector2()), volume(vol), pressure(0), density(1010), mass(10000){};
 };
 struct Index{
 public:
