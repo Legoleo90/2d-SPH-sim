@@ -32,25 +32,6 @@ float Distance(Vector2 a, Vector2 b) {
     return sqrtf(dx * dx + dy * dy);
 }
 
-__device__
-Vector2 BorderForce(Vector2 pos, const int width, const int height){
-    const float maxDis = 30;
-    const float repulsiveForce = 400;
-
-    Vector2 force = Vector2(0, 0);
-
-    if (pos.x < maxDis)
-        force.x += repulsiveForce * (maxDis - pos.x);
-    if (width - pos.x < maxDis)
-        force.x -= repulsiveForce * (maxDis - (width - pos.x));
-    if (pos.y < maxDis)
-        force.y += repulsiveForce * (maxDis - pos.y);
-    if (height - pos.y < maxDis)
-        force.y -= repulsiveForce * (maxDis - (height - pos.y));
-
-    return force;
-}
-
 __global__ 
 void InitParticles(Particle* particles, curandState *states, int width, int height, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -82,14 +63,30 @@ void InitIndices(unsigned int* indices, int particleCount){
 
 __global__ 
 void UpdatePosition(Particle* particles, int width, int height, const int particleCount, float dTime){
+    const float eps = 16;
+    const float boundDamping = -0.5f;
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
-    particles[id].position.Add(particles[id].direction * dTime);
-    float newX = Clamp(particles[id].position.x, (float)0, (float)width - 1);
-    float newY = Clamp(particles[id].position.y, (float)0, (float)height - 1);
-    particles[id].position.x = newX;
-    particles[id].position.y = newY;
+    particles[id].velocity = particles[id].velocity + particles[id].force * dTime;
+    particles[id].position = particles[id].position + particles[id].velocity * dTime;
+
+    if (particles[id].position.x - eps < 0.f){
+        particles[id].velocity.x *= boundDamping;
+        particles[id].position.x = eps;
+    }
+    if (particles[id].position.x + eps > static_cast<float>(width)){
+        particles[id].velocity.x *= boundDamping;
+        particles[id].position.x = width - eps;
+    }
+    if (particles[id].position.y - eps < 0.f){
+        particles[id].velocity.y *= boundDamping;
+        particles[id].position.y = eps;
+    }
+    if (particles[id].position.y + eps > static_cast<float>(height)){
+        particles[id].velocity.y *= boundDamping;
+        particles[id].position.y = height - eps;
+    }
 }
 
 __host__
@@ -101,23 +98,19 @@ void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount
         indices
     );
 }
-
-__device__
-float poly6Kernel(float r, float h){
-    if (r < 0 || h < r)
-        return 0;
-    const float pi = 3.14159;
-    return (4.0 / (pi*__powf(h, 8))) * __powf(h*h -r*r, 3);
-}
-
 __global__
 void GetDensityPressure(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height){
-    const float smoothingLength = 25;
-    const float mass = 2.5f;
+    const float smoothingLength = 16;
+    const float mass = 25.f;
+    const float gasConst = 2000.f;
+    const float restDens = 300.f;
+    const float pi = 3.14159;
+    const float poly6 = 4.f / (pi * __powf(smoothingLength, 8.f)); 
+    const float hsq = smoothingLength * smoothingLength;
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
-
+    int neighbours = 0;
     float density = 0;
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
@@ -133,40 +126,18 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
             for (int i = hashBorders[hash].start; i < hashBorders[hash].end; i++){
                 unsigned int index = indices[i];
                 float dis = Distance(particles[id].position, particles[index].position);
-                float kernel = poly6Kernel(dis, smoothingLength);
-                density += mass * kernel;
+                float r2 = dis*dis;
+                if (r2 < hsq){
+                    neighbours++;
+                    density += mass * poly6 * __powf(hsq - r2, 3.f);
+                }
             }
         }
     }
     particles[id].density = density;
-    const float gasConst = 2000.0f;
-    const float restDens = 300.0f;
     particles[id].pressure = gasConst * (density - restDens);
-}
-
-__global__
-void GetPressure(Particle* particles, const int particleCount){
-    const float refDensity = 1000;
-    const float soundSpeed = 20;
-    const float y = 7;
-
-    int id = blockDim.x * blockIdx.x + threadIdx.x;
-    if (id >= particleCount)
-        return;
-
-    float pressure = (((soundSpeed * soundSpeed * refDensity) / y) * (__powf(particles[id].density / refDensity, y) - 1));
-    particles[id].pressure = pressure;
-}
-
-__device__ __forceinline__
-Vector2 SpikyGradient(Vector2 rij, float r, float h) {
-    if (r <= 1e-6f || r >= h)
-        return Vector2();
-    rij = rij / r;
-    const float pi = 3.14159265f;
-    float coeff = -30.0f / (pi * __powf(h, 5));
-    float scale = coeff * __powf(h-r, 2);
-    return rij * scale;
+    if (id == 0)
+        printf("%f\n", density);
 }
 
 __global__
@@ -174,10 +145,15 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
-    const float smoothingLength = 25;
+
+    const float pi = 3.14159265f;
+    const float smoothingLength = 16;
     const float mass = 2.5f;
-    const float viscConst = 300.0f;
-    Vector2 dir = Vector2();
+    const float viscConst = 200.f;
+    const float viscLap  = 40.f / (pi * __powf(smoothingLength, 5.f));
+    const float spikyGrad = -10.f / (pi * __powf(smoothingLength, 5.f));
+
+    Vector2 press = Vector2();
     Vector2 visc = Vector2();
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
@@ -188,25 +164,16 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
                 unsigned int index = indices[i];
                 if (index == id)
                     continue;
-                Vector2 rij = particles[id].position - particles[index].position;
+                Vector2 rij = particles[index].position - particles[id].position;
                 float r = Distance(particles[id].position, particles[index].position);
-                dir = dir + (SpikyGradient(rij, r, smoothingLength) * ((particles[id].pressure + particles[index].pressure) / (2.0f * particles[index].density) * __powf(smoothingLength-r, 3.0f))) * (rij/-r) * mass;
-                visc = visc + viscConst * mass * (particles[index].velocity);
-                // float dis = Distance(particles[index].position, particles[id].position);
-                // Vector2 kernelGradient = SpikyGradient(particles[id].position-particles[index].position, dis, smoothingLength);
-                // Vector2 newDirection = kernelGradient *((particles[id].pressure) / __powf(particles[id].density, 2) + (particles[index].pressure) / __powf(particles[index].density, 2)) * -particles[index].mass;
-                // dir = dir + newDirection;
+                if (r < smoothingLength){
+                    press = press + rij.Normalized() * -mass * (particles[id].pressure + particles[index].pressure) / (2.f * particles[index].density) * spikyGrad * __powf(smoothingLength - r, 3.f);
+                    visc = visc + (particles[index].velocity - particles[id].velocity) * (viscConst * mass / particles[index].density * viscLap * (smoothingLength - r));
+                }
             }
         }
     }
-    Vector2 gravity = Vector2(0.0f, -600.0f);
-    Vector2 acceleration = dir + gravity + BorderForce(particles[id].position, width, height);
-    Vector2 newDir = Vector2(
-        particles[id].direction.x + acceleration.x * dTime,
-        particles[id].direction.y + acceleration.y * dTime
-    );
-
-    particles[id].direction = newDir;
+    particles[id].force = (press + visc) / particles[id].density - Vector2(0.f, 9.82f);
 }
 
 __global__

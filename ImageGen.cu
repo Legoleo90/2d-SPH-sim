@@ -23,8 +23,8 @@ unsigned int*  hashValues = nullptr;
 unsigned int* indices = nullptr;
 Index* hashBorders = nullptr;
 
-const int particleCount = 50000;
-const int cellSize = 25;
+const int particleCount = 10000;
+const int cellSize = 32;
 int cellCount = 0;
 
 __global__
@@ -40,7 +40,7 @@ extern "C" void ClearCudaData(){
     cudaFree(indices);
 }
 
-extern "C" unsigned char* GenerateImage(int width, int height, int channels, float deltaTime){
+extern "C" unsigned char* GenerateImage(int width, int height, int channels, float deltaTime){    
     dim3 imBlock(16, 16);
     dim3 imGrid(width / imBlock.x + 1, height / imBlock.y + 1);
 
@@ -121,7 +121,7 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels, flo
         hashBorders,
         cellCount
     );
-    GetDensity<<<particleGrid, particleBlock>>>(
+    GetDensityPressure<<<particleGrid, particleBlock>>>(
         gpuParticles,
         particleCount,
         hashBorders,
@@ -129,10 +129,6 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels, flo
         cellSize,
         width,
         height
-    );
-    GetPressure<<<particleGrid, particleBlock>>>(
-        gpuParticles,
-        particleCount
     );
     UpdateDirection<<<particleGrid, particleBlock>>>(
         gpuParticles,

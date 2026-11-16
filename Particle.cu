@@ -19,6 +19,11 @@ public:
         y /= len;
     }
     __device__
+    inline Vector2 Normalized(){
+        float len = sqrtf(x*x + y*y);
+        return Vector2(x / len, y / len);
+    }
+    __device__
     Vector2 operator+(const Vector2& term) const {
         return {
             x + term.x,
@@ -56,10 +61,10 @@ public:
 };
 struct Particle{
 public: 
-    Vector2 position, direction;
+    Vector2 position, force, velocity;
     float volume, pressure, density, mass;
     __device__
-    Particle(float x, float y, float vol) : position(Vector2(x, y)), direction(Vector2()), volume(vol), pressure(0), density(1010), mass(10000){};
+    Particle(float x, float y, float vol) : position(Vector2(x, y)), force(Vector2()), velocity(Vector2()), volume(vol), pressure(0), density(1010), mass(2.5f){};
 };
 struct Index{
 public:
