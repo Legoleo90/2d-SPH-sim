@@ -7,7 +7,7 @@ void InitHashIndex(Index* indexBorders, const int particleCount);
 __global__ 
 void UpdatePosition(Particle* particles, int width, int height, const int particleCount, float dTime);
 __global__
-void GetDensity(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height);
+void GetDensityPressure(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height);
 __global__
 void GetPressure(Particle* particles, const int particleCount);
 __global__

@@ -13,6 +13,12 @@ public:
         y += term.y;
     }
     __device__
+    inline void Normalize(){
+        float len = sqrtf(x*x + y*y);
+        x /= len;
+        y /= len;
+    }
+    __device__
     Vector2 operator+(const Vector2& term) const {
         return {
             x + term.x,
@@ -38,6 +44,13 @@ public:
         return {
             x * factor,
             y * factor
+        };
+    }
+    __device__
+    Vector2 operator*(const Vector2 factor) const {
+        return {
+            x * factor.x,
+            y * factor.y
         };
     }
 };

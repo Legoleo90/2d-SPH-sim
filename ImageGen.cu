@@ -23,7 +23,7 @@ unsigned int*  hashValues = nullptr;
 unsigned int* indices = nullptr;
 Index* hashBorders = nullptr;
 
-const int particleCount = 10000;
+const int particleCount = 50000;
 const int cellSize = 25;
 int cellCount = 0;
 

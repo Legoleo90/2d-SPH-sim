@@ -10,7 +10,6 @@
 extern "C" unsigned char* GenerateImage(int width, int height, int channels, float deltaTime);
 extern "C" void ClearCudaData();
 
-
 int main() {
     //Create window matching to the current screen size
     if (!glfwInit())
@@ -28,8 +27,7 @@ int main() {
     }
     glfwMakeContextCurrent(window);
     glfwSwapInterval(0);
-
-
+    
     if (glewInit() != GLEW_OK)
         return -1;
 

@@ -111,12 +111,13 @@ float poly6Kernel(float r, float h){
 }
 
 __global__
-void GetDensity(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height){
+void GetDensityPressure(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height){
     const float smoothingLength = 25;
+    const float mass = 2.5f;
     int id = blockDim.x * blockIdx.x + threadIdx.x;
-    int neighbours = 0;
     if (id >= particleCount)
         return;
+
     float density = 0;
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
@@ -133,15 +134,14 @@ void GetDensity(Particle* particles, const int particleCount, Index* hashBorders
                 unsigned int index = indices[i];
                 float dis = Distance(particles[id].position, particles[index].position);
                 float kernel = poly6Kernel(dis, smoothingLength);
-                if(dis < smoothingLength)
-                {
-                    neighbours++;
-                }
-                density += particles[index].mass * kernel;
+                density += mass * kernel;
             }
         }
     }
     particles[id].density = density;
+    const float gasConst = 2000.0f;
+    const float restDens = 300.0f;
+    particles[id].pressure = gasConst * (density - restDens);
 }
 
 __global__
@@ -175,7 +175,10 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
     if (id >= particleCount)
         return;
     const float smoothingLength = 25;
+    const float mass = 2.5f;
+    const float viscConst = 300.0f;
     Vector2 dir = Vector2();
+    Vector2 visc = Vector2();
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
             unsigned int hashVal = GetHash(particles[id].position, cellSize, width, height, Vector2(col, row));
@@ -183,10 +186,16 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
                 continue;
             for (int i = hashBorders[hashVal].start; i < hashBorders[hashVal].end; i++){
                 unsigned int index = indices[i];
-                float dis = Distance(particles[index].position, particles[id].position);
-                Vector2 kernelGradient = SpikyGradient(particles[id].position-particles[index].position, dis, smoothingLength);
-                Vector2 newDirection = kernelGradient *((particles[id].pressure) / __powf(particles[id].density, 2) + (particles[index].pressure) / __powf(particles[index].density, 2)) * -particles[index].mass;
-                dir = dir + newDirection;
+                if (index == id)
+                    continue;
+                Vector2 rij = particles[id].position - particles[index].position;
+                float r = Distance(particles[id].position, particles[index].position);
+                dir = dir + (SpikyGradient(rij, r, smoothingLength) * ((particles[id].pressure + particles[index].pressure) / (2.0f * particles[index].density) * __powf(smoothingLength-r, 3.0f))) * (rij/-r) * mass;
+                visc = visc + viscConst * mass * (particles[index].velocity);
+                // float dis = Distance(particles[index].position, particles[id].position);
+                // Vector2 kernelGradient = SpikyGradient(particles[id].position-particles[index].position, dis, smoothingLength);
+                // Vector2 newDirection = kernelGradient *((particles[id].pressure) / __powf(particles[id].density, 2) + (particles[index].pressure) / __powf(particles[index].density, 2)) * -particles[index].mass;
+                // dir = dir + newDirection;
             }
         }
     }
