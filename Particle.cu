@@ -62,9 +62,9 @@ public:
 struct Particle{
 public: 
     Vector2 position, force, velocity;
-    float volume, pressure, density, mass;
+    float pressure, density, mass;
     __device__
-    Particle(float x, float y, float vol) : position(Vector2(x, y)), force(Vector2()), velocity(Vector2()), volume(vol), pressure(0), density(1010), mass(2.5f){};
+    Particle(float x, float y) : position(Vector2(x, y)), force(Vector2()), velocity(Vector2()), pressure(0), density(1010), mass(2.5f){};
 };
 struct Index{
 public:

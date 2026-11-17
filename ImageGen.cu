@@ -24,7 +24,7 @@ unsigned int* indices = nullptr;
 Index* hashBorders = nullptr;
 
 const int particleCount = 10000;
-const int cellSize = 32;
+const int cellSize = 8;
 int cellCount = 0;
 
 __global__
@@ -41,6 +41,9 @@ extern "C" void ClearCudaData(){
 }
 
 extern "C" unsigned char* GenerateImage(int width, int height, int channels, float deltaTime){    
+    deltaTime = 0.0007f;
+    int subframes = 64;
+    
     dim3 imBlock(16, 16);
     dim3 imGrid(width / imBlock.x + 1, height / imBlock.y + 1);
 
@@ -97,56 +100,58 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels, flo
         height,
         channels
     );
-    CalculateHash<<<particleGrid, particleBlock>>>(
-        gpuParticles,
-        width,
-        height,
-        hashValues,
-        cellSize,
-        particleCount
-    );
-    InitIndices<<<particleGrid, particleBlock>>>(
-        indices,
-        particleCount
-    );
-    SortHash(
-        hashValues,
-        indices,
-        particleCount
-    );
-    cudaMemset(hashBorders, 0, sizeof(Index) * cellCount);
-    GetHashBorders<<<particleGrid, particleBlock>>>(
-        hashValues,
-        particleCount,
-        hashBorders,
-        cellCount
-    );
-    GetDensityPressure<<<particleGrid, particleBlock>>>(
-        gpuParticles,
-        particleCount,
-        hashBorders,
-        indices,
-        cellSize,
-        width,
-        height
-    );
-    UpdateDirection<<<particleGrid, particleBlock>>>(
-        gpuParticles,
-        deltaTime,
-        cellSize,
-        width,
-        height,
-        particleCount,
-        hashBorders,
-        indices
-    );
-    UpdatePosition<<<particleGrid, particleBlock>>>(
-        gpuParticles,
-        width,
-        height,
-        particleCount,
-        deltaTime
-    );
+    for (int i = 0; i < subframes; i++){
+        CalculateHash<<<particleGrid, particleBlock>>>(
+            gpuParticles,
+            width,
+            height,
+            hashValues,
+            cellSize,
+            particleCount
+        );
+        InitIndices<<<particleGrid, particleBlock>>>(
+            indices,
+            particleCount
+        );
+        SortHash(
+            hashValues,
+            indices,
+            particleCount
+        );
+        cudaMemset(hashBorders, 0, sizeof(Index) * cellCount);
+        GetHashBorders<<<particleGrid, particleBlock>>>(
+            hashValues,
+            particleCount,
+            hashBorders,
+            cellCount
+        );
+        GetDensityPressure<<<particleGrid, particleBlock>>>(
+            gpuParticles,
+            particleCount,
+            hashBorders,
+            indices,
+            cellSize,
+            width,
+            height
+        );
+        UpdateDirection<<<particleGrid, particleBlock>>>(
+            gpuParticles,
+            deltaTime,
+            cellSize,
+            width,
+            height,
+            particleCount,
+            hashBorders,
+            indices
+        );
+        UpdatePosition<<<particleGrid, particleBlock>>>(
+            gpuParticles,
+            width,
+            height,
+            particleCount,
+            deltaTime
+        );
+    }
     placeParticles<<<particleGrid, particleBlock>>>(
         gpuImagePtr,
         gpuParticles,

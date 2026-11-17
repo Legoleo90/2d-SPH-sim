@@ -37,12 +37,13 @@ void InitParticles(Particle* particles, curandState *states, int width, int heig
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
-    const float wallRepulsionDis = 0.1;
+    const float h = 8;
+    const int verticalParticles = height / h;
+    const int horizontalParticles = (particleCount + verticalParticles - 1) / verticalParticles;
     curand_init(0, id, 0, &states[id]);
-    float x = (curand_uniform(&states[id]) - 0.5) * 100 + width / 2;
-    float y = curand_uniform(&states[id]) * (height - 2 * wallRepulsionDis) + wallRepulsionDis;
-    const float startingVol = 5;
-    particles[id] = Particle(x, y, startingVol);
+    const float xPos = (id % horizontalParticles) * h + width / 2 - (horizontalParticles / 2) * h + curand_uniform(&states[id]);
+    const float yPos = (id / horizontalParticles) * h;
+    particles[id] = Particle(xPos, yPos);
 }
 
 __global__
@@ -63,7 +64,7 @@ void InitIndices(unsigned int* indices, int particleCount){
 
 __global__ 
 void UpdatePosition(Particle* particles, int width, int height, const int particleCount, float dTime){
-    const float eps = 16;
+    const float eps = 8;
     const float boundDamping = -0.5f;
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
@@ -100,7 +101,7 @@ void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount
 }
 __global__
 void GetDensityPressure(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height){
-    const float smoothingLength = 16;
+    const float smoothingLength = 8;
     const float mass = 25.f;
     const float gasConst = 2000.f;
     const float restDens = 300.f;
@@ -136,8 +137,6 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
     }
     particles[id].density = density;
     particles[id].pressure = gasConst * (density - restDens);
-    if (id == 0)
-        printf("%f\n", density);
 }
 
 __global__
@@ -147,7 +146,7 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
         return;
 
     const float pi = 3.14159265f;
-    const float smoothingLength = 16;
+    const float smoothingLength = 8;
     const float mass = 2.5f;
     const float viscConst = 200.f;
     const float viscLap  = 40.f / (pi * __powf(smoothingLength, 5.f));
@@ -173,7 +172,8 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
             }
         }
     }
-    particles[id].force = (press + visc) / particles[id].density - Vector2(0.f, 9.82f);
+    Vector2 gravForce = Vector2(0, -9.82f) * mass / particles[id].density;
+    particles[id].force = (press + visc) / particles[id].density + gravForce;
 }
 
 __global__
