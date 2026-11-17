@@ -16,9 +16,9 @@ __global__
 void CalculateHash(Particle* particles, const int width, const int height, unsigned int* hash, const int cellSize, const int particleCount);
 __global__
 void InitIndices(unsigned int* indices, int particleCount);
-__host__
-void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount);
 __global__
 void GetHashBorders(unsigned int* sortedHash, const int particleCount, Index* indexBorders, const int hashCount);
 __global__
 void placeParticles(unsigned char* image, Particle* particles, const int width, const int height, const int channels, const int particleCount);
+__host__
+void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount);

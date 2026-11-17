@@ -7,7 +7,7 @@
 #include <device_launch_parameters.h>
 
 
-extern "C" unsigned char* GenerateImage(int width, int height, int channels, float deltaTime);
+extern "C" unsigned char* GenerateImage(int width, int height, int channels);
 extern "C" void ClearCudaData();
 
 int main() {
@@ -153,11 +153,9 @@ int main() {
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);
 
-
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-
 
         //Copy cuda image from cuda kernel to openGl
         cudaGraphicsMapResources(1, &cudaResource);
@@ -165,7 +163,7 @@ int main() {
         cudaGraphicsSubResourceGetMappedArray(&array, cudaResource, 0, 0);
 
 
-        unsigned char* gpuImage = GenerateImage(width, height, channels, deltaTime);
+        unsigned char* gpuImage = GenerateImage(width, height, channels);
         cudaMemcpy2DToArray(array, 0, 0, gpuImage, width * channels, width * channels, height, cudaMemcpyDeviceToDevice);
         cudaGraphicsUnmapResources(1, &cudaResource);
 
