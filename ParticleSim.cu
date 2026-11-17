@@ -113,7 +113,6 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
         return;
     const float poly6 = 4.f / (pi * __powf(h, 8.f)); 
     const float hsq = h * h;
-    int neighbours = 0;
     float density = 0;
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
@@ -131,15 +130,12 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
                 float dis = Math::Distance(particles[id].position, particles[index].position);
                 float r2 = dis*dis;
                 if (r2 < hsq){
-                    neighbours++;
                     density += mass * poly6 * __powf(hsq - r2, 3.f);
                 }
             }
         }
     }
     particles[id].density = density;
-    if (id == 0)
-        printf("%f\n", density);
     particles[id].pressure = gasConst * (density - restDens);
 }
 __global__

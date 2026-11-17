@@ -26,7 +26,7 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(0);
+    glfwSwapInterval(1);
 
     if (glewInit() != GLEW_OK)
         return -1;
@@ -144,29 +144,29 @@ int main() {
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(glGetUniformLocation(shaderProgram, "screenTexture"), 0);
 
-
-    float deltaTime = 0.0f;
-    float lastFrame = 0.0f;
-
+    const float simulationIntervals = 1.f/60.f;
+    float accumelator = 0.f;
+    float lastFrame = 0.f;
 
     //Run render loop
     while (!glfwWindowShouldClose(window)) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         float currentFrame = static_cast<float>(glfwGetTime());
-        deltaTime = currentFrame - lastFrame;
+        accumelator += currentFrame - lastFrame;
         lastFrame = currentFrame;
+        if (simulationIntervals <= accumelator){
+            
+            //Copy cuda image from cuda kernel to openGl
+            cudaGraphicsMapResources(1, &cudaResource);
+            cudaArray_t array;
+            cudaGraphicsSubResourceGetMappedArray(&array, cudaResource, 0, 0);
 
-        //Copy cuda image from cuda kernel to openGl
-        cudaGraphicsMapResources(1, &cudaResource);
-        cudaArray_t array;
-        cudaGraphicsSubResourceGetMappedArray(&array, cudaResource, 0, 0);
 
-
-        unsigned char* gpuImage = GenerateImage(width, height, channels);
-        cudaMemcpy2DToArray(array, 0, 0, gpuImage, width * channels, width * channels, height, cudaMemcpyDeviceToDevice);
-        cudaGraphicsUnmapResources(1, &cudaResource);
-
+            unsigned char* gpuImage = GenerateImage(width, height, channels);
+            cudaMemcpy2DToArray(array, 0, 0, gpuImage, width * channels, width * channels, height, cudaMemcpyDeviceToDevice);
+            cudaGraphicsUnmapResources(1, &cudaResource);
+        }
 
         //Render quad with texture
         glUseProgram(shaderProgram);

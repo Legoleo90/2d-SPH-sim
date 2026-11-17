@@ -25,7 +25,7 @@ Index* hashBorders = nullptr;
 
 const int particleCount = 4000;
 const int cellSize = 16;
-const float deltaTime = 0.0001f;
+const float deltaTime = 0.0005f;
 const int subframes = 16;
 int cellCount = 0;
 
