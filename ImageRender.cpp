@@ -26,7 +26,7 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(60);
+    glfwSwapInterval(0);
 
     if (glewInit() != GLEW_OK)
         return -1;

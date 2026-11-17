@@ -3,12 +3,12 @@
 #include <thrust/sort.h>
 #include <climits>
 
-__device__ const float h = 2.f;
-__device__ const float mass = 2.5f;
-__device__ const float gasConst = 2000.f;
+__device__ const float h = 8.f; //particle size
+__device__ const float mass = 2.5f;         
+__device__ const float gasConst = 2000.f; //stiffness
 __device__ const float restDens = 300.f;
 __device__ const float pi = 3.14159f;
-__device__ const float viscConst = 200.f;
+__device__ const float viscConst = 20.f;
 
 static class Math{
 public:
@@ -44,7 +44,7 @@ public:
     }
 };
 
-//HASHING//
+//INITIALIZATION//
 __global__ 
 void InitParticles(Particle* particles, curandState *states, int width, int height, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -54,9 +54,11 @@ void InitParticles(Particle* particles, curandState *states, int width, int heig
     const int horizontalParticles = (particleCount + verticalParticles - 1) / verticalParticles;
     curand_init(0, id, 0, &states[id]);
     const float xPos = (id % horizontalParticles) * h + width / 2 - (horizontalParticles / 2) * h + curand_uniform(&states[id]);
-    const float yPos = (id / horizontalParticles) * h;
+    const float yPos = (id / horizontalParticles + 0.5f) * h;
     particles[id] = Particle(xPos, yPos);
 }
+
+//HASHING//
 __global__
 void InitHashIndex(Index* indexBorders, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -136,6 +138,8 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
         }
     }
     particles[id].density = density;
+    if (id == 0)
+        printf("%f\n", density);
     particles[id].pressure = gasConst * (density - restDens);
 }
 __global__
@@ -218,7 +222,7 @@ void GenerateCudaImage(unsigned char* image, int width, int height, int channels
 __global__
 void placeParticles(unsigned char* image, Particle* particles, const int width, const int height, const int channels, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
-    const int radius = 4;
+    const int radius = h / 2;
     if (id >= particleCount)
         return;
     int x = (int)particles[id].position.x;
