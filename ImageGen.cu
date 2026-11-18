@@ -18,15 +18,15 @@ do { \
 } while (0)
 
 unsigned char* gpuImagePtr = nullptr;
-Particle* gpuParticles = nullptr;
+Particle gpuParticles = NULL;
 unsigned int*  hashValues = nullptr;
 unsigned int* indices = nullptr;
 Index* hashBorders = nullptr;
 
-const int particleCount = 4000;
-const int cellSize = 16;
-const float deltaTime = 0.0005f;
-const int subframes = 16;
+const int particleCount = 40000;
+const int cellSize = 8;
+const float deltaTime = 0.001f;
+const int subframes = 4;
 int cellCount = 0;
 
 __global__
@@ -40,10 +40,10 @@ void Render(const int width, const int height, const int channels);
 
 extern "C" void ClearCudaData(){
     cudaFree(gpuImagePtr);
-    cudaFree(gpuParticles);
     cudaFree(hashValues);
     cudaFree(hashBorders);
     cudaFree(indices);
+    gpuParticles.Free();
 }
 
 extern "C" unsigned char* GenerateImage(int width, int height, int channels){    
@@ -63,8 +63,7 @@ void InitSim(const int width, const int height, const int channels){
     size_t imageSize = width * height * channels * sizeof(unsigned char);
     cudaMalloc(&gpuImagePtr, imageSize);
 
-    size_t particleSize = sizeof(Particle) * particleCount;
-    cudaMalloc(&gpuParticles, particleSize);
+    gpuParticles = Particle(particleCount);
 
     curandState* states;
     cudaMalloc(&states, sizeof(curandState) * particleCount);

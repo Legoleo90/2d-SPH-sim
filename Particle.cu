@@ -61,10 +61,35 @@ public:
 };
 struct Particle{
 public: 
-    Vector2 position, force, velocity;
-    float pressure, density, mass;
-    __device__
-    Particle(float x, float y) : position(Vector2(x, y)), force(Vector2()), velocity(Vector2()), pressure(0), density(1010), mass(2.5f){};
+    Vector2* position;
+    Vector2* force;
+    Vector2* velocity;
+
+    float* pressure; 
+    float* density;
+    float* mass;
+
+    __host__
+    Particle(const int particleCount){
+        size_t vectorSize = sizeof(Vector2) * particleCount;
+        cudaMalloc(&position, vectorSize);
+        cudaMalloc(&force, vectorSize);
+        cudaMalloc(&velocity, vectorSize);
+
+        size_t floatSize = sizeof(float) * particleCount;
+        cudaMalloc(&pressure, floatSize);
+        cudaMalloc(&density, floatSize);
+        cudaMalloc(&mass, floatSize);
+    };
+    __host__
+    void Free(){
+        cudaFree(position);
+        cudaFree(force);
+        cudaFree(velocity);
+        cudaFree(pressure);
+        cudaFree(density);
+        cudaFree(mass);
+    }
 };
 struct Index{
 public:

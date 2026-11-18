@@ -15,8 +15,8 @@ int main() {
     if (!glfwInit())
         return -1;
    
-    int width = 1000;//GetSystemMetrics(SM_CXSCREEN);
-    int height = 1000;//GetSystemMetrics(SM_CYSCREEN);
+    int width = GetSystemMetrics(SM_CXSCREEN);
+    int height = GetSystemMetrics(SM_CYSCREEN);
     int channels = 4;
 
 
@@ -155,8 +155,7 @@ int main() {
         float currentFrame = static_cast<float>(glfwGetTime());
         accumelator += currentFrame - lastFrame;
         lastFrame = currentFrame;
-        if (simulationIntervals <= accumelator){
-            
+        while (simulationIntervals <= accumelator){   
             //Copy cuda image from cuda kernel to openGl
             cudaGraphicsMapResources(1, &cudaResource);
             cudaArray_t array;
@@ -166,6 +165,8 @@ int main() {
             unsigned char* gpuImage = GenerateImage(width, height, channels);
             cudaMemcpy2DToArray(array, 0, 0, gpuImage, width * channels, width * channels, height, cudaMemcpyDeviceToDevice);
             cudaGraphicsUnmapResources(1, &cudaResource);
+
+            accumelator-=simulationIntervals;
         }
 
         //Render quad with texture

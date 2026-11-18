@@ -3,7 +3,7 @@
 #include <thrust/sort.h>
 #include <climits>
 
-__device__ const float h = 8.f; //particle size
+__device__ const float h = 4.f; //particle size
 __device__ const float mass = 2.5f;         
 __device__ const float gasConst = 2000.f; //stiffness
 __device__ const float restDens = 300.f;
@@ -46,7 +46,7 @@ public:
 
 //INITIALIZATION//
 __global__ 
-void InitParticles(Particle* particles, curandState *states, int width, int height, const int particleCount){
+void InitParticles(Particle particles, curandState *states, int width, int height, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
@@ -55,7 +55,7 @@ void InitParticles(Particle* particles, curandState *states, int width, int heig
     curand_init(0, id, 0, &states[id]);
     const float xPos = (id % horizontalParticles) * h + width / 2 - (horizontalParticles / 2) * h + curand_uniform(&states[id]);
     const float yPos = (id / horizontalParticles + 0.5f) * h;
-    particles[id] = Particle(xPos, yPos);
+    particles.position[id] = Vector2(xPos, yPos);
 }
 
 //HASHING//
@@ -74,11 +74,11 @@ void InitIndices(unsigned int* indices, int particleCount){
     indices[id] = id;
 }
 __global__
-void CalculateHash(Particle* particles, const int width, const int height, unsigned int* hash, const int cellSize, const int particleCount){
+void CalculateHash(Particle particles, const int width, const int height, unsigned int* hash, const int cellSize, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
-    unsigned int hashVal = Hash::GetHash(particles[id].position, cellSize, width, height, Vector2());
+    unsigned int hashVal = Hash::GetHash(particles.position[id], cellSize, width, height, Vector2());
     hash[id] = hashVal;
 }
 __host__
@@ -107,7 +107,7 @@ void GetHashBorders(unsigned int* sortedHash, const int particleCount, Index* in
 
 //FORCE CALUCULATIONS//
 __global__
-void GetDensityPressure(Particle* particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height){
+void GetDensityPressure(Particle particles, const int particleCount, Index* hashBorders, unsigned int* indices, const int cellSize, const int width, const int height){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
@@ -117,7 +117,7 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
             unsigned int hash = Hash::GetHash(
-                particles[id].position,
+                particles.position[id],
                 cellSize, 
                 width,
                 height,
@@ -127,7 +127,7 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
                 continue;
             for (int i = hashBorders[hash].start; i < hashBorders[hash].end; i++){
                 unsigned int index = indices[i];
-                float dis = Math::Distance(particles[id].position, particles[index].position);
+                float dis = Math::Distance(particles.position[id], particles.position[index]);
                 float r2 = dis*dis;
                 if (r2 < hsq){
                     density += mass * poly6 * __powf(hsq - r2, 3.f);
@@ -135,11 +135,11 @@ void GetDensityPressure(Particle* particles, const int particleCount, Index* has
             }
         }
     }
-    particles[id].density = density;
-    particles[id].pressure = gasConst * (density - restDens);
+    particles.density[id] = density;
+    particles.pressure[id] = gasConst * (density - restDens);
 }
 __global__
-void UpdateDirection(Particle* particles, float dTime, const int cellSize, const int width, const int height, const int particleCount, Index* hashBorders, unsigned int* indices){    
+void UpdateDirection(Particle particles, float dTime, const int cellSize, const int width, const int height, const int particleCount, Index* hashBorders, unsigned int* indices){    
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
@@ -151,51 +151,51 @@ void UpdateDirection(Particle* particles, float dTime, const int cellSize, const
     Vector2 visc = Vector2();
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
-            unsigned int hashVal = Hash::GetHash(particles[id].position, cellSize, width, height, Vector2(col, row));
+            unsigned int hashVal = Hash::GetHash(particles.position[id], cellSize, width, height, Vector2(col, row));
             if (hashVal == UINT_MAX)
                 continue;
             for (int i = hashBorders[hashVal].start; i < hashBorders[hashVal].end; i++){
                 unsigned int index = indices[i];
                 if (index == id)
                     continue;
-                Vector2 rij = particles[index].position - particles[id].position;
-                float r = Math::Distance(particles[id].position, particles[index].position);
+                Vector2 rij = particles.position[index] - particles.position[id];
+                float r = Math::Distance(particles.position[id], particles.position[index]);
                 if (r < h){
-                    press = press + rij.Normalized() * -mass * (particles[id].pressure + particles[index].pressure) / (2.f * particles[index].density) * spikyGrad * __powf(h - r, 3.f);
-                    visc = visc + (particles[index].velocity - particles[id].velocity) * (viscConst * mass / particles[index].density * viscLap * (h - r));
+                    press = press + rij.Normalized() * -mass * (particles.pressure[id] + particles.pressure[index]) / (2.f * particles.density[index]) * spikyGrad * __powf(h - r, 3.f);
+                    visc = visc + (particles.velocity[index] - particles.velocity[id]) * (viscConst * mass / particles.density[index] * viscLap * (h - r));
                 }
             }
         }
     }
-    Vector2 gravForce = Vector2(0, -9.82f) * mass / particles[id].density;
-    particles[id].force = (press + visc) / particles[id].density + gravForce;
+    Vector2 gravForce = Vector2(0, -9.82f) * mass / particles.density[id];
+    particles.force[id] = (press + visc) / particles.density[id] + gravForce;
 }
 
 //POSITION UPDATING
 __global__ 
-void UpdatePosition(Particle* particles, int width, int height, const int particleCount, float dTime){
+void UpdatePosition(Particle particles, int width, int height, const int particleCount, float dTime){
     const float boundDamping = -0.5f;
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     if (id >= particleCount)
         return;
-    particles[id].velocity = particles[id].velocity + particles[id].force * dTime;
-    particles[id].position = particles[id].position + particles[id].velocity * dTime;
+    particles.velocity[id] = particles.velocity[id] + particles.force[id] * dTime;
+    particles.position[id] = particles.position[id] + particles.velocity[id] * dTime;
 
-    if (particles[id].position.x - h < 0.f){
-        particles[id].velocity.x *= boundDamping;
-        particles[id].position.x = h;
+    if (particles.position[id].x - h < 0.f){
+        particles.velocity[id].x *= boundDamping;
+        particles.position[id].x = h;
     }
-    if (particles[id].position.x + h > static_cast<float>(width)){
-        particles[id].velocity.x *= boundDamping;
-        particles[id].position.x = width - h;
+    if (particles.position[id].x + h > static_cast<float>(width)){
+        particles.velocity[id].x *= boundDamping;
+        particles.position[id].x = width - h;
     }
-    if (particles[id].position.y - h < 0.f){
-        particles[id].velocity.y *= boundDamping;
-        particles[id].position.y = h;
+    if (particles.position[id].y - h < 0.f){
+        particles.velocity[id].y *= boundDamping;
+        particles.position[id].y = h;
     }
-    if (particles[id].position.y + h > static_cast<float>(height)){
-        particles[id].velocity.y *= boundDamping;
-        particles[id].position.y = height - h;
+    if (particles.position[id].y + h > static_cast<float>(height)){
+        particles.velocity[id].y *= boundDamping;
+        particles.position[id].y = height - h;
     }
 }
 
@@ -216,13 +216,13 @@ void GenerateCudaImage(unsigned char* image, int width, int height, int channels
     pixel[3] = 255;
 }
 __global__
-void placeParticles(unsigned char* image, Particle* particles, const int width, const int height, const int channels, const int particleCount){
+void placeParticles(unsigned char* image, Particle particles, const int width, const int height, const int channels, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
     const int radius = h / 2;
     if (id >= particleCount)
         return;
-    int x = (int)particles[id].position.x;
-    int y = (int)particles[id].position.y;
+    int x = (int)particles.position[id].x;
+    int y = (int)particles.position[id].y;
     for (int col = -radius; col <= radius; col++){
         for (int row = -radius; row <= radius; row++){
             if (col * col + row * row > radius * radius)
