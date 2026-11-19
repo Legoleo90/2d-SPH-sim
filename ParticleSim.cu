@@ -2,13 +2,14 @@
 #include <curand_kernel.h>
 #include <thrust/sort.h>
 #include <climits>
+#include <cub/cub.cuh>
 
 __device__ const float h = 4.f; //particle size
 __device__ const float mass = 2.5f;         
 __device__ const float gasConst = 2000.f; //stiffness
 __device__ const float restDens = 300.f;
 __device__ const float pi = 3.14159f;
-__device__ const float viscConst = 20.f;
+__device__ const float viscConst = 10.f;
 
 static class Math{
 public:
@@ -81,15 +82,28 @@ void CalculateHash(Particle particles, const int width, const int height, unsign
     unsigned int hashVal = Hash::GetHash(particles.position[id], cellSize, width, height, Vector2());
     hash[id] = hashVal;
 }
+
 __host__
-void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount){
-    thrust::sort_by_key(
-        thrust::device,
-        hash,
-        hash + particleCount,
-        indices
+void SortHash(unsigned int* inHash, unsigned int* outHash, unsigned int* inIndices, unsigned int* outIndices, void* tempStorage, size_t tempStorageSize, const int particleCount){
+    cub::DeviceRadixSort::SortPairs(
+        tempStorage,
+        tempStorageSize,
+        inHash,
+        outHash,
+        inIndices,
+        outIndices,
+        particleCount
     );
 }
+// __host__
+// void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount){ 
+//     thrust::sort_by_key(
+//         thrust::device,
+//         hash,
+//         hash + particleCount,
+//         indices
+//     );
+// }
 __global__
 void GetHashBorders(unsigned int* sortedHash, const int particleCount, Index* indexBorders, const int hashCount)
 {
@@ -114,10 +128,13 @@ void GetDensityPressure(Particle particles, const int particleCount, Index* hash
     const float poly6 = 4.f / (pi * __powf(h, 8.f)); 
     const float hsq = h * h;
     float density = 0;
+
+    Vector2 piX = particles.position[id];
+
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
             unsigned int hash = Hash::GetHash(
-                particles.position[id],
+                piX,
                 cellSize, 
                 width,
                 height,
@@ -127,7 +144,7 @@ void GetDensityPressure(Particle particles, const int particleCount, Index* hash
                 continue;
             for (int i = hashBorders[hash].start; i < hashBorders[hash].end; i++){
                 unsigned int index = indices[i];
-                float dis = Math::Distance(particles.position[id], particles.position[index]);
+                float dis = Math::Distance(piX, particles.position[index]);
                 float r2 = dis*dis;
                 if (r2 < hsq){
                     density += mass * poly6 * __powf(hsq - r2, 3.f);
@@ -147,22 +164,30 @@ void UpdateDirection(Particle particles, float dTime, const int cellSize, const 
     const float viscLap  = 40.f / (pi * __powf(h, 5.f));
     const float spikyGrad = -10.f / (pi * __powf(h, 5.f));
 
+    Vector2 piX = particles.position[id];
+    float piP = particles.pressure[id];
+    Vector2 piV = particles.velocity[id];
+
     Vector2 press = Vector2();
     Vector2 visc = Vector2();
     for (int col = -1; col <= 1; col++){
         for (int row = -1; row <= 1; row++){
-            unsigned int hashVal = Hash::GetHash(particles.position[id], cellSize, width, height, Vector2(col, row));
+            unsigned int hashVal = Hash::GetHash(piX, cellSize, width, height, Vector2(col, row));
             if (hashVal == UINT_MAX)
                 continue;
             for (int i = hashBorders[hashVal].start; i < hashBorders[hashVal].end; i++){
                 unsigned int index = indices[i];
                 if (index == id)
                     continue;
-                Vector2 rij = particles.position[index] - particles.position[id];
-                float r = Math::Distance(particles.position[id], particles.position[index]);
+
+                Vector2 pjP = particles.position[index];
+                float pjRho = particles.density[index];
+
+                Vector2 rij = pjP - piX;
+                float r = Math::Distance(piX, pjP);
                 if (r < h){
-                    press = press + rij.Normalized() * -mass * (particles.pressure[id] + particles.pressure[index]) / (2.f * particles.density[index]) * spikyGrad * __powf(h - r, 3.f);
-                    visc = visc + (particles.velocity[index] - particles.velocity[id]) * (viscConst * mass / particles.density[index] * viscLap * (h - r));
+                    press = press + rij.Normalized() * -mass * (piP + particles.pressure[index]) / (2.f * pjRho) * spikyGrad * __powf(h - r, 3.f);
+                    visc = visc + (particles.velocity[index] - piV) * (viscConst * mass / pjRho * viscLap * (h - r));
                 }
             }
         }

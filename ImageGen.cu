@@ -4,6 +4,7 @@
 #include <iostream>
 #include "Particle.cu"
 #include "ParticleSim.cuh"
+#include <cub/cub.cuh>
 
 #define CUDA_CHECK(call) \
 do { \
@@ -20,13 +21,18 @@ do { \
 unsigned char* gpuImagePtr = nullptr;
 Particle gpuParticles = NULL;
 unsigned int*  hashValues = nullptr;
+unsigned int* sortedHashValues = nullptr;
 unsigned int* indices = nullptr;
+unsigned int* sortedIndices = nullptr;
 Index* hashBorders = nullptr;
+void* tempStorage = nullptr;
+size_t tempStorageByte = 0;
 
-const int particleCount = 40000;
+const int particleCount = 50000;
 const int cellSize = 8;
-const float deltaTime = 0.001f;
-const int subframes = 4;
+const float deltaTime = 0.0001f;
+const int subframes = 32;
+const int sortingFreq = 16;
 int cellCount = 0;
 
 __global__
@@ -43,6 +49,9 @@ extern "C" void ClearCudaData(){
     cudaFree(hashValues);
     cudaFree(hashBorders);
     cudaFree(indices);
+    cudaFree(tempStorage);
+    cudaFree(sortedHashValues);
+    cudaFree(sortedIndices);
     gpuParticles.Free();
 }
 
@@ -50,7 +59,8 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels){
     if (gpuImagePtr == nullptr)
         InitSim(width, height, channels);
     for (int i = 0; i < subframes; i++){
-        Hash(width, height);
+        if (i % sortingFreq == 0)
+            Hash(width, height);
         SimulateForces(width, height);
     }
     Render(width, height, channels);
@@ -98,6 +108,9 @@ void InitSim(const int width, const int height, const int channels){
         indices,
         particleCount
     );
+
+    cudaMalloc(&sortedIndices, hashSize);
+    cudaMalloc(&sortedHashValues, hashSize);
 }
 
 void Hash(const int width, const int height){
@@ -115,14 +128,30 @@ void Hash(const int width, const int height){
         indices,
         particleCount
     );
+    if (tempStorage == nullptr){
+        cub::DeviceRadixSort::SortPairs(
+            tempStorage,
+            tempStorageByte,
+            hashValues,
+            sortedHashValues,
+            indices,
+            sortedIndices,
+            particleCount
+        );
+        cudaMalloc(&tempStorage, tempStorageByte);
+    }
     SortHash(
         hashValues,
+        sortedHashValues,
         indices,
+        sortedIndices,
+        tempStorage,
+        tempStorageByte,
         particleCount
     );
     cudaMemset(hashBorders, 0, sizeof(Index) * cellCount);
     GetHashBorders<<<particleGrid, particleBlock>>>(
-        hashValues,
+        sortedHashValues,
         particleCount,
         hashBorders,
         cellCount
@@ -136,7 +165,7 @@ void SimulateForces(const int width, const int height){
         gpuParticles,
         particleCount,
         hashBorders,
-        indices,
+        sortedIndices,
         cellSize,
         width,
         height
@@ -149,7 +178,7 @@ void SimulateForces(const int width, const int height){
         height,
         particleCount,
         hashBorders,
-        indices
+        sortedIndices
     );
     UpdatePosition<<<particleGrid, particleBlock>>>(
         gpuParticles,

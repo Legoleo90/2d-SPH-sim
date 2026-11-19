@@ -144,7 +144,7 @@ int main() {
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(glGetUniformLocation(shaderProgram, "screenTexture"), 0);
 
-    const float simulationIntervals = 1.f/60.f;
+    const float simulationIntervals = 1.f/100.f;
     float accumelator = 0.f;
     float lastFrame = 0.f;
 
@@ -156,11 +156,15 @@ int main() {
         accumelator += currentFrame - lastFrame;
         lastFrame = currentFrame;
         while (simulationIntervals <= accumelator){   
+            if (accumelator > 3*simulationIntervals){
+                accumelator = 0;
+                break;
+            }
+
             //Copy cuda image from cuda kernel to openGl
             cudaGraphicsMapResources(1, &cudaResource);
             cudaArray_t array;
             cudaGraphicsSubResourceGetMappedArray(&array, cudaResource, 0, 0);
-
 
             unsigned char* gpuImage = GenerateImage(width, height, channels);
             cudaMemcpy2DToArray(array, 0, 0, gpuImage, width * channels, width * channels, height, cudaMemcpyDeviceToDevice);

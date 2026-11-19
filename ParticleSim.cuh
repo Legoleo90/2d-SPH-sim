@@ -21,4 +21,4 @@ void GetHashBorders(unsigned int* sortedHash, const int particleCount, Index* in
 __global__
 void placeParticles(unsigned char* image, Particle particles, const int width, const int height, const int channels, const int particleCount);
 __host__
-void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount);
+void SortHash(unsigned int* inHash, unsigned int* outHash, unsigned int* inIndices, unsigned int* outIndices, void* tempStorage, size_t tempStorageSize, const int particleCount);
