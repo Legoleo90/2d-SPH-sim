@@ -9,7 +9,7 @@ __device__ const float mass = 2.5f;
 __device__ const float gasConst = 2000.f; //stiffness
 __device__ const float restDens = 300.f;
 __device__ const float pi = 3.14159f;
-__device__ const float viscConst = 10.f;
+__device__ const float viscConst = 5.f;
 
 static class Math{
 public:
@@ -95,15 +95,6 @@ void SortHash(unsigned int* inHash, unsigned int* outHash, unsigned int* inIndic
         particleCount
     );
 }
-// __host__
-// void SortHash(unsigned int* hash, unsigned int* indices, const int particleCount){ 
-//     thrust::sort_by_key(
-//         thrust::device,
-//         hash,
-//         hash + particleCount,
-//         indices
-//     );
-// }
 __global__
 void GetHashBorders(unsigned int* sortedHash, const int particleCount, Index* indexBorders, const int hashCount)
 {

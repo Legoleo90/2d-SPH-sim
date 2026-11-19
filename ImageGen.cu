@@ -28,11 +28,11 @@ Index* hashBorders = nullptr;
 void* tempStorage = nullptr;
 size_t tempStorageByte = 0;
 
-const int particleCount = 50000;
+const int particleCount = 100000;
 const int cellSize = 8;
-const float deltaTime = 0.0001f;
-const int subframes = 32;
-const int sortingFreq = 16;
+const float deltaTime = 0.00005f;
+const int subframes = 64;
+const int sortingFreq = 32;
 int cellCount = 0;
 
 __global__
@@ -124,10 +124,12 @@ void Hash(const int width, const int height){
         cellSize,
         particleCount
     );
+    cudaDeviceSynchronize();
     InitIndices<<<particleGrid, particleBlock>>>(
         indices,
         particleCount
     );
+    cudaDeviceSynchronize();
     if (tempStorage == nullptr){
         cub::DeviceRadixSort::SortPairs(
             tempStorage,
@@ -149,6 +151,7 @@ void Hash(const int width, const int height){
         tempStorageByte,
         particleCount
     );
+    cudaDeviceSynchronize();
     cudaMemset(hashBorders, 0, sizeof(Index) * cellCount);
     GetHashBorders<<<particleGrid, particleBlock>>>(
         sortedHashValues,
@@ -156,6 +159,7 @@ void Hash(const int width, const int height){
         hashBorders,
         cellCount
     );
+    cudaDeviceSynchronize();
 }
 
 void SimulateForces(const int width, const int height){
@@ -170,6 +174,7 @@ void SimulateForces(const int width, const int height){
         width,
         height
     );
+    cudaDeviceSynchronize();
     UpdateDirection<<<particleGrid, particleBlock>>>(
         gpuParticles,
         deltaTime,
@@ -180,6 +185,7 @@ void SimulateForces(const int width, const int height){
         hashBorders,
         sortedIndices
     );
+    cudaDeviceSynchronize();
     UpdatePosition<<<particleGrid, particleBlock>>>(
         gpuParticles,
         width,
@@ -187,6 +193,7 @@ void SimulateForces(const int width, const int height){
         particleCount,
         deltaTime
     );
+    cudaDeviceSynchronize();
 }
 
 void Render(const int width, const int height, const int channels){
