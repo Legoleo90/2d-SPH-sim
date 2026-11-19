@@ -150,11 +150,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         //Copy cuda image from cuda kernel to openGl
-        glFinish();
-        auto start = std::chrono::high_resolution_clock::now();
         cudaGraphicsMapResources(1, &cudaResource);
-        auto end = std::chrono::high_resolution_clock::now();
-        std::cout<<end-start<<std::endl;
         cudaArray_t array;
         cudaGraphicsSubResourceGetMappedArray(&array, cudaResource, 0, 0);
 

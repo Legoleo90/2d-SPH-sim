@@ -9,7 +9,7 @@ __device__ const float mass = 2.5f;
 __device__ const float gasConst = 2000.f; //stiffness
 __device__ const float restDens = 300.f;
 __device__ const float pi = 3.14159f;
-__device__ const float viscConst = 5.f;
+__device__ const float viscConst = 12.f;
 
 static class Math{
 public:
@@ -119,6 +119,7 @@ void GetDensityPressure(Particle particles, const int particleCount, Index* hash
     const float poly6 = 4.f / (pi * __powf(h, 8.f)); 
     const float hsq = h * h;
     float density = 0;
+    int nB = 0;
 
     Vector2 piX = particles.position[id];
 
@@ -139,6 +140,7 @@ void GetDensityPressure(Particle particles, const int particleCount, Index* hash
                 float r2 = dis*dis;
                 if (r2 < hsq){
                     density += mass * poly6 * __powf(hsq - r2, 3.f);
+                    nB++;
                 }
             }
         }

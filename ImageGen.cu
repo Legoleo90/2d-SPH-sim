@@ -28,10 +28,10 @@ Index* hashBorders = nullptr;
 void* tempStorage = nullptr;
 size_t tempStorageByte = 0;
 
-const int particleCount = 100000;
-const int cellSize = 8;
-const float deltaTime = 0.00005f;
-const int subframes = 64;
+const int particleCount = 20000;
+const int cellSize = 16;
+const float deltaTime = 0.0005f;
+const int subframes = 128;
 const int sortingFreq = 32;
 int cellCount = 0;
 
@@ -67,7 +67,7 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels){
     return gpuImagePtr;
 }
 void InitSim(const int width, const int height, const int channels){
-    dim3 particleBlock(256);
+    dim3 particleBlock(64);
     dim3 particleGrid(particleCount / particleBlock.x + 1);
 
     size_t imageSize = width * height * channels * sizeof(unsigned char);
@@ -86,7 +86,7 @@ void InitSim(const int width, const int height, const int channels){
         particleCount
     );
 
-    dim3 hashBlock(256);
+    dim3 hashBlock(64);
     dim3 hashGrid(cellCount / hashBlock.x + 1);
 
     size_t hashSize = sizeof(unsigned int) * particleCount;
@@ -114,7 +114,7 @@ void InitSim(const int width, const int height, const int channels){
 }
 
 void Hash(const int width, const int height){
-    dim3 particleBlock(256);
+    dim3 particleBlock(64);
     dim3 particleGrid(particleCount / particleBlock.x + 1);
     CalculateHash<<<particleGrid, particleBlock>>>(
         gpuParticles,
@@ -124,12 +124,12 @@ void Hash(const int width, const int height){
         cellSize,
         particleCount
     );
-    cudaDeviceSynchronize();
+    
     InitIndices<<<particleGrid, particleBlock>>>(
         indices,
         particleCount
     );
-    cudaDeviceSynchronize();
+    
     if (tempStorage == nullptr){
         cub::DeviceRadixSort::SortPairs(
             tempStorage,
@@ -151,7 +151,7 @@ void Hash(const int width, const int height){
         tempStorageByte,
         particleCount
     );
-    cudaDeviceSynchronize();
+    
     cudaMemset(hashBorders, 0, sizeof(Index) * cellCount);
     GetHashBorders<<<particleGrid, particleBlock>>>(
         sortedHashValues,
@@ -159,11 +159,11 @@ void Hash(const int width, const int height){
         hashBorders,
         cellCount
     );
-    cudaDeviceSynchronize();
+    
 }
 
 void SimulateForces(const int width, const int height){
-    dim3 particleBlock(256);
+    dim3 particleBlock(64);
     dim3 particleGrid(particleCount / particleBlock.x + 1);
     GetDensityPressure<<<particleGrid, particleBlock>>>(
         gpuParticles,
@@ -174,7 +174,7 @@ void SimulateForces(const int width, const int height){
         width,
         height
     );
-    cudaDeviceSynchronize();
+    
     UpdateDirection<<<particleGrid, particleBlock>>>(
         gpuParticles,
         deltaTime,
@@ -185,7 +185,7 @@ void SimulateForces(const int width, const int height){
         hashBorders,
         sortedIndices
     );
-    cudaDeviceSynchronize();
+    
     UpdatePosition<<<particleGrid, particleBlock>>>(
         gpuParticles,
         width,
@@ -193,14 +193,14 @@ void SimulateForces(const int width, const int height){
         particleCount,
         deltaTime
     );
-    cudaDeviceSynchronize();
+    
 }
 
 void Render(const int width, const int height, const int channels){
-    dim3 imBlock(16, 16);
+    dim3 imBlock(8, 8);
     dim3 imGrid(width / imBlock.x + 1, height / imBlock.y + 1);
 
-    dim3 particleBlock(256);
+    dim3 particleBlock(64);
     dim3 particleGrid(particleCount / particleBlock.x + 1);
 
     GenerateCudaImage<<<imGrid, imBlock>>>(
