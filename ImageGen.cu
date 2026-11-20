@@ -28,11 +28,11 @@ Index* hashBorders = nullptr;
 void* tempStorage = nullptr;
 size_t tempStorageByte = 0;
 
-const int particleCount = 20000;
-const int cellSize = 16;
-const float deltaTime = 0.0005f;
-const int subframes = 128;
-const int sortingFreq = 32;
+const int particleCount = 10000;
+const int cellSize = 12;
+const float deltaTime = 0.001f;
+const int subframes = 16;
+const int sortingFreq = 8;
 int cellCount = 0;
 
 __global__
@@ -64,6 +64,7 @@ extern "C" unsigned char* GenerateImage(int width, int height, int channels){
         SimulateForces(width, height);
     }
     Render(width, height, channels);
+    cudaDeviceSynchronize();
     return gpuImagePtr;
 }
 void InitSim(const int width, const int height, const int channels){
@@ -174,7 +175,6 @@ void SimulateForces(const int width, const int height){
         width,
         height
     );
-    
     UpdateDirection<<<particleGrid, particleBlock>>>(
         gpuParticles,
         deltaTime,
@@ -185,7 +185,6 @@ void SimulateForces(const int width, const int height){
         hashBorders,
         sortedIndices
     );
-    
     UpdatePosition<<<particleGrid, particleBlock>>>(
         gpuParticles,
         width,

@@ -6,6 +6,7 @@
 #include <cuda_gl_interop.h>
 #include <device_launch_parameters.h>
 #include <chrono>
+#include <thread>
 
 
 extern "C" unsigned char* GenerateImage(int width, int height, int channels);
@@ -16,8 +17,8 @@ int main() {
     if (!glfwInit())
         return -1;
    
-    int width = GetSystemMetrics(SM_CXSCREEN);
-    int height = GetSystemMetrics(SM_CYSCREEN);
+    int width = 1000; //GetSystemMetrics(SM_CXSCREEN);
+    int height = 1000; //GetSystemMetrics(SM_CYSCREEN);
     int channels = 4;
 
 
@@ -27,7 +28,7 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    glfwSwapInterval(0);
 
     if (glewInit() != GLEW_OK)
         return -1;
@@ -145,8 +146,14 @@ int main() {
     glActiveTexture(GL_TEXTURE0);
     glUniform1i(glGetUniformLocation(shaderProgram, "screenTexture"), 0);
 
+    const double targetFPS = 60.0;
+    const auto frameDuration =
+        std::chrono::duration<double>(1.0 / targetFPS);
+
     //Run render loop
     while (!glfwWindowShouldClose(window)) {
+        auto frameStart = std::chrono::steady_clock::now();
+
         glClear(GL_COLOR_BUFFER_BIT);
 
         //Copy cuda image from cuda kernel to openGl
@@ -167,6 +174,12 @@ int main() {
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        auto frameEnd = std::chrono::steady_clock::now();
+        auto frameTime = frameEnd-frameStart;
+        
+        if (frameTime < frameDuration)
+            std::this_thread::sleep_for(frameDuration - frameTime);   
     }
     glfwTerminate();
     ClearCudaData();

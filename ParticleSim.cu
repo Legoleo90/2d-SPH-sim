@@ -4,12 +4,14 @@
 #include <climits>
 #include <cub/cub.cuh>
 
-__device__ const float h = 4.f; //particle size
+__device__ const float h = 6.f; //particle size
+__device__ const float h2 = 36.f;
 __device__ const float mass = 2.5f;         
 __device__ const float gasConst = 2000.f; //stiffness
 __device__ const float restDens = 300.f;
 __device__ const float pi = 3.14159f;
 __device__ const float viscConst = 12.f;
+__device__ const float metaBallLen = 8.f;
 
 static class Math{
 public:
@@ -23,6 +25,11 @@ public:
         float dx = a.x - b.x;
         float dy = a.y - b.y;
         return sqrtf(dx * dx + dy * dy);
+    }
+    __device__ __forceinline__
+    static float GetGradient(float t, float len){
+        t = Clamp(t, 0.f, 1.f);
+        return t;
     }
 };
 
@@ -117,9 +124,7 @@ void GetDensityPressure(Particle particles, const int particleCount, Index* hash
     if (id >= particleCount)
         return;
     const float poly6 = 4.f / (pi * __powf(h, 8.f)); 
-    const float hsq = h * h;
     float density = 0;
-    int nB = 0;
 
     Vector2 piX = particles.position[id];
 
@@ -138,9 +143,8 @@ void GetDensityPressure(Particle particles, const int particleCount, Index* hash
                 unsigned int index = indices[i];
                 float dis = Math::Distance(piX, particles.position[index]);
                 float r2 = dis*dis;
-                if (r2 < hsq){
-                    density += mass * poly6 * __powf(hsq - r2, 3.f);
-                    nB++;
+                if (r2 < h2){
+                    density += mass * poly6 * __powf(h2 - r2, 3.f);
                 }
             }
         }
@@ -160,7 +164,7 @@ void UpdateDirection(Particle particles, float dTime, const int cellSize, const 
     Vector2 piX = particles.position[id];
     float piP = particles.pressure[id];
     Vector2 piV = particles.velocity[id];
-
+    int neighbours = 0;
     Vector2 press = Vector2();
     Vector2 visc = Vector2();
     for (int col = -1; col <= 1; col++){
@@ -177,10 +181,12 @@ void UpdateDirection(Particle particles, float dTime, const int cellSize, const 
                 float pjRho = particles.density[index];
 
                 Vector2 rij = pjP - piX;
-                float r = Math::Distance(piX, pjP);
-                if (r < h){
-                    press = press + rij.Normalized() * -mass * (piP + particles.pressure[index]) / (2.f * pjRho) * spikyGrad * __powf(h - r, 3.f);
+                float rsq = rij.x*rij.x+rij.y*rij.y;
+                if (rsq < h2){
+                    float r = sqrtf(rsq);
+                    press = press + (rij/r) * -mass * (piP + particles.pressure[index]) / (2.f * pjRho) * spikyGrad * __powf(h - r, 3.f);
                     visc = visc + (particles.velocity[index] - piV) * (viscConst * mass / pjRho * viscLap * (h - r));
+                    neighbours++;
                 }
             }
         }
@@ -233,6 +239,36 @@ void GenerateCudaImage(unsigned char* image, int width, int height, int channels
     pixel[2] = 25;
     pixel[3] = 255;
 }
+__global__
+void RenderMetaballs(unsigned char* image, Particle particles, const int cellSize, const int width, const int height, Index* hashBorders, unsigned int* indices){
+    int idX = blockDim.x * blockIdx.x + threadIdx.x;
+    int idY = blockDim.y * blockIdx.y + threadIdx.y;
+    if (idX >= width || idY >= height)
+        return;
+    Vector2 piX = Vector2(idX, idY);
+    const int searchRad = 1;
+    float activeColor = 0.f;
+    for (int col = -searchRad; col <= searchRad; col++){
+        for (int row = -searchRad; row <= searchRad; row++){
+            unsigned int hashVal = Hash::GetHash(
+                piX,
+                cellSize,
+                width,
+                height,
+                Vector2(col, row)
+            );
+            if (hashVal == UINT_MAX)
+                continue;
+            for (int i = hashBorders[hashVal].start; i <= hashBorders[hashVal].end; i++){
+                unsigned int index = indices[hashVal];
+                Vector2 pjX = particles.position[index];
+                float t = Math::Distance(piX, pjX) / metaBallLen;
+                activeColor+=Math::GetGradient(t, metaBallLen);
+            }
+        }
+    }
+}
+
 __global__
 void placeParticles(unsigned char* image, Particle particles, const int width, const int height, const int channels, const int particleCount){
     int id = blockDim.x * blockIdx.x + threadIdx.x;
